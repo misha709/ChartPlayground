@@ -1,0 +1,851 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <title>Simple Chart App</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        body {
+            font-family: Arial;
+            margin: 0;
+            padding: 20px;
+            background: #f6f8fa;
+            height: 100vh;
+            box-sizing: border-box;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        h2 {
+            margin: 0;
+        }
+
+        .settings-btn {
+            padding: 8px 16px;
+            background: #007acc;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        .settings-btn:hover {
+            background: #005a9e;
+        }
+
+        .format-controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 10px;
+            flex-wrap: wrap;
+        }
+
+        .format-btn {
+            padding: 6px 12px;
+            background: #f8f9fa;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            color: #333;
+        }
+
+        .format-btn:hover {
+            background: #e9ecef;
+        }
+
+        .format-btn.active {
+            background: #007acc;
+            color: white;
+        }
+
+        .export-controls {
+            display: flex;
+            gap: 8px;
+        }
+
+        .export-btn {
+            padding: 8px 16px;
+            background: #28a745;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .export-btn:hover {
+            background: #218838;
+        }
+
+        .export-btn.csv {
+            background: #17a2b8;
+        }
+
+        .export-btn.csv:hover {
+            background: #138496;
+        }
+
+        .container {
+            display: flex;
+            gap: 20px;
+            height: calc(100vh - 80px);
+        }
+
+        .left-panel {
+            flex: 0.4;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .left-panel h3 {
+            margin: 0 0 10px 0;
+        }
+
+        #jsonInput {
+            flex: 1;
+            padding: 10px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            resize: none;
+            outline: none;
+        }
+
+        .right-panel {
+            flex: 0.6;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .chart-section {
+            flex: 1;
+            background: white;
+            border-radius: 6px;
+            box-shadow: 0 0 5px rgba(0, 0, 0, 0.1);
+            padding: 15px;
+            position: relative;
+        }
+
+        .chart-section canvas {
+            width: 100% !important;
+            height: 100% !important;
+        }
+
+        .data-grid-section {
+            flex: 1;
+            background: white;
+            border-radius: 6px;
+            box-shadow: 0 0 5px rgba(0, 0, 0, 0.1);
+            padding: 15px;
+            overflow: auto;
+        }
+
+        .data-grid-section h4 {
+            margin: 0 0 15px 0;
+        }
+
+        #dataTable {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 12px;
+        }
+
+        #dataTable th,
+        #dataTable td {
+            border: 1px solid #ddd;
+            padding: 4px 8px;
+            text-align: left;
+        }
+
+        #dataTable th {
+            background: #f8f9fa;
+            font-weight: bold;
+            position: sticky;
+            top: 0;
+        }
+
+        #dataTable tr:nth-child(even) {
+            background: #f9f9f9;
+        }
+
+        #dataTable tr:hover {
+            background: #e8f4f8;
+        }
+
+        #dataTable tbody tr {
+            cursor: pointer;
+        }
+
+        #dataTable tbody tr.highlighted {
+            background: #007acc !important;
+            color: white;
+        }
+
+        /* Modal Styles */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+        }
+
+        .modal-content {
+            background-color: white;
+            margin: 5% auto;
+            padding: 0;
+            border-radius: 8px;
+            width: 600px;
+            max-height: 80vh;
+            overflow: hidden;
+        }
+
+        .modal-header {
+            padding: 20px;
+            border-bottom: 1px solid #ddd;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .modal-header h3 {
+            margin: 0;
+        }
+
+        .close {
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+            color: #aaa;
+        }
+
+        .close:hover {
+            color: black;
+        }
+
+        .modal-body {
+            padding: 20px;
+            max-height: 50vh;
+            overflow-y: auto;
+        }
+
+        .modal-footer {
+            padding: 20px;
+            border-top: 1px solid #ddd;
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+        }
+
+        .btn {
+            padding: 8px 16px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            cursor: pointer;
+            background: white;
+        }
+
+        .btn:hover {
+            background: #f5f5f5;
+        }
+
+        .btn-primary {
+            background: #007acc;
+            color: white;
+            border-color: #007acc;
+        }
+
+        .btn-primary:hover {
+            background: #005a9e;
+        }
+
+        .line-config {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin-bottom: 15px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 6px;
+        }
+
+        .line-config input[type="text"] {
+            flex: 1;
+            padding: 6px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+
+        .line-config input[type="color"] {
+            width: 50px;
+            height: 30px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .line-config button {
+            background: #dc3545;
+            color: white;
+            border: none;
+            padding: 6px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .line-config button:hover {
+            background: #c82333;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="header">
+        <h2>Chart Playground</h2>
+        <div class="export-controls">
+            <button id="exportCsv" class="export-btn csv">📄 Export CSV</button>
+            <button id="exportExcel" class="export-btn">📊 Export Excel</button>
+            <button id="settingsBtn" class="settings-btn">⚙️ Line Settings</button>
+        </div>
+    </div>
+    
+    <div class="container">
+        <div class="left-panel">
+            <h3>JSON Data</h3>
+            <div class="format-controls">
+                <button id="loadFormat1" class="format-btn active">Original Format</button>
+                <button id="loadFormat2" class="format-btn">Category Format</button>
+            </div>
+            <textarea id="jsonInput" placeholder="Paste your JSON data here..."></textarea>
+        </div>
+        
+        <div class="right-panel">
+            <div class="chart-section">
+                <canvas id="chart" width="900" height="400"></canvas>
+            </div>
+            
+            <div class="data-grid-section">
+                <h4>Data Grid</h4>
+                <table id="dataTable">
+                    <thead>
+                        <tr id="tableHeader"></tr>
+                    </thead>
+                    <tbody id="tableBody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="settingsModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Line Configuration Settings</h3>
+                <span class="close">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div id="lineConfigList"></div>
+                <button id="addLineConfig" class="btn">+ Add Line Type</button>
+            </div>
+            <div class="modal-footer">
+                <button id="saveSettings" class="btn btn-primary">Save Settings</button>
+                <button id="resetSettings" class="btn">Reset to Defaults</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const ctx = document.getElementById('chart').getContext('2d');
+        const jsonInput = document.getElementById('jsonInput');
+        const tableHeader = document.getElementById('tableHeader');
+        const tableBody = document.getElementById('tableBody');
+        const settingsBtn = document.getElementById('settingsBtn');
+        const settingsModal = document.getElementById('settingsModal');
+        const lineConfigList = document.getElementById('lineConfigList');
+        let chart;
+        let highlightedRowIndex = -1;
+
+        // Default line configurations
+        const defaultLineConfigs = {
+            'Consumption': { color: '#ff8400', label: 'Consumption' },
+            'Generation': { color: '#3d65a0', label: 'Generation' },
+            'Panels': { color: '#6aca94', label: 'Panels' },
+            'Battery': { color: '#9c27b0', label: 'Battery' },
+            'Grid': { color: '#ff5722', label: 'Grid' }
+        };
+
+        // Load line configurations from localStorage
+        function getLineConfigs() {
+            const saved = localStorage.getItem('chartLineConfigs');
+            return saved ? JSON.parse(saved) : { ...defaultLineConfigs };
+        }
+
+        // Save line configurations to localStorage
+        function saveLineConfigs(configs) {
+            localStorage.setItem('chartLineConfigs', JSON.stringify(configs));
+        }
+
+        // Generate 5-minute time labels for 24h period
+        function generateTimeLabels() {
+            const labels = [];
+            for (let h = 0; h < 24; h++) {
+                for (let m = 0; m < 60; m += 5) {
+                    labels.push(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`);
+                }
+            }
+            return labels;
+        }
+
+        // Export functions
+        function exportToCSV() {
+            try {
+                const rawData = JSON.parse(jsonInput.value.trim());
+                const data = normalizeDataFormat(rawData);
+                
+                if (!data || !data.chartData || !Array.isArray(data.chartData)) {
+                    alert('No valid data to export. Please ensure your data is in a supported format.');
+                    return;
+                }
+
+                const labels = generateTimeLabels();
+                let csvContent = 'Time,' + data.chartData.map(series => series.type).join(',') + '\n';
+                
+                // Generate rows
+                for (let i = 0; i < labels.length; i++) {
+                    let row = labels[i];
+                    data.chartData.forEach(series => {
+                        const value = series.values[i] || 0;
+                        row += ',' + value.toFixed(2);
+                    });
+                    csvContent += row + '\n';
+                }
+
+                // Create and download file
+                const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                const link = document.createElement('a');
+                const url = URL.createObjectURL(blob);
+                link.setAttribute('href', url);
+                link.setAttribute('download', `chart-data-${new Date().toISOString().split('T')[0]}.csv`);
+                link.style.visibility = 'hidden';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                URL.revokeObjectURL(url);
+                
+            } catch (error) {
+                alert('Error exporting CSV: ' + error.message);
+            }
+        }
+
+        function exportToExcel() {
+            try {
+                const rawData = JSON.parse(jsonInput.value.trim());
+                const data = normalizeDataFormat(rawData);
+                
+                if (!data || !data.chartData || !Array.isArray(data.chartData)) {
+                    alert('No valid data to export. Please ensure your data is in a supported format.');
+                    return;
+                }
+
+                const labels = generateTimeLabels();
+                
+                // Prepare data for Excel
+                const excelData = [];
+                
+                // Header row
+                const header = ['Time', ...data.chartData.map(series => series.type)];
+                excelData.push(header);
+                
+                // Data rows
+                for (let i = 0; i < labels.length; i++) {
+                    const row = [labels[i]];
+                    data.chartData.forEach(series => {
+                        const value = series.values[i] || 0;
+                        row.push(parseFloat(value.toFixed(2)));
+                    });
+                    excelData.push(row);
+                }
+
+                // Create workbook and worksheet
+                const wb = XLSX.utils.book_new();
+                const ws = XLSX.utils.aoa_to_sheet(excelData);
+                
+                // Auto-width columns
+                const colWidths = header.map(h => ({ wch: Math.max(h.length, 12) }));
+                ws['!cols'] = colWidths;
+                
+                // Add worksheet to workbook
+                XLSX.utils.book_append_sheet(wb, ws, 'Chart Data');
+                
+                // Generate and download file
+                const fileName = `chart-data-${new Date().toISOString().split('T')[0]}.xlsx`;
+                XLSX.writeFile(wb, fileName);
+                
+            } catch (error) {
+                alert('Error exporting Excel: ' + error.message);
+            }
+        }
+
+        // Function to detect and convert new data format
+        function normalizeDataFormat(data) {
+            // Check if it's an array of objects with category, amount, and chartData structure
+            if (Array.isArray(data) && data.length > 0 && data[0].category && data[0].chartData) {
+                // Convert new format to existing format
+                return {
+                    chartData: data.map(item => ({
+                        type: item.category,
+                        values: item.chartData.values || []
+                    }))
+                };
+            }
+            
+            // Check if it's already in the existing format
+            if (data && data.chartData && Array.isArray(data.chartData)) {
+                return data;
+            }
+            
+            // If it's neither format, return null to indicate invalid data
+            return null;
+        }
+
+        // Update chart and data grid when JSON changes
+        function updateVisualization() {
+            try {
+                const rawData = JSON.parse(jsonInput.value.trim());
+                
+                // Normalize the data format
+                const data = normalizeDataFormat(rawData);
+                
+                if (!data || !data.chartData || !Array.isArray(data.chartData)) {
+                    console.log('Invalid data format. Supported formats:\n' +
+                               '1. { "chartData": [{ "type": "...", "values": [...] }] }\n' +
+                               '2. [{ "category": "...", "amount": ..., "chartData": { "values": [...] } }]');
+                    return;
+                }
+
+                const labels = generateTimeLabels();
+                const lineConfigs = getLineConfigs();
+                
+                // Create datasets based on available data and configurations
+                const datasets = data.chartData.map(series => {
+                    const config = lineConfigs[series.type] || { 
+                        color: '#' + Math.floor(Math.random()*16777215).toString(16), 
+                        label: series.type 
+                    };
+                    
+                    return {
+                        label: config.label,
+                        data: series.values,
+                        borderWidth: 2,
+                        borderColor: config.color,
+                        pointRadius: 0,
+                        pointHoverRadius: 5,
+                        fill: false
+                    };
+                });
+
+                // Update chart with click handler
+                if (chart) chart.destroy();
+                chart = new Chart(ctx, {
+                    type: 'line',
+                    data: { labels, datasets },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                            x: { title: { display: true, text: 'Time (HH:mm)' } },
+                            y: { title: { display: true, text: 'Value' } }
+                        },
+                        plugins: {
+                            legend: { position: 'top' },
+                            tooltip: { 
+                                mode: 'index', 
+                                intersect: false,
+                                callbacks: {
+                                    afterLabel: function(context) {
+                                        return 'Row: ' + (context.dataIndex + 1);
+                                    }
+                                }
+                            }
+                        },
+                        elements: { line: { tension: 0.3 } },
+                        onHover: (event, activeElements) => {
+                            if (activeElements.length > 0) {
+                                const dataIndex = activeElements[0].index;
+                                highlightTableRow(dataIndex);
+                            }
+                        }
+                    }
+                });
+
+                // Update data grid
+                updateDataGrid(labels, data.chartData);
+
+            } catch (error) {
+                console.error('Error parsing JSON:', error.message);
+            }
+        }
+
+        // Update the data grid table
+        function updateDataGrid(labels, chartData) {
+            // Clear existing content
+            tableHeader.innerHTML = '';
+            tableBody.innerHTML = '';
+
+            if (chartData.length === 0) return;
+
+            const lineConfigs = getLineConfigs();
+
+            // Create header
+            const timeHeader = document.createElement('th');
+            timeHeader.textContent = 'Time';
+            tableHeader.appendChild(timeHeader);
+
+            chartData.forEach(series => {
+                const th = document.createElement('th');
+                const config = lineConfigs[series.type];
+                th.textContent = config ? config.label : series.type;
+                if (config) {
+                    th.style.color = config.color;
+                    th.style.fontWeight = 'bold';
+                }
+                tableHeader.appendChild(th);
+            });
+
+            // Create rows
+            labels.forEach((time, index) => {
+                const row = document.createElement('tr');
+                row.dataset.index = index;
+                
+                const timeCell = document.createElement('td');
+                timeCell.textContent = time;
+                row.appendChild(timeCell);
+
+                chartData.forEach(series => {
+                    const cell = document.createElement('td');
+                    const value = series.values[index];
+                    cell.textContent = value !== null && value !== undefined ? value.toFixed(2) : 'null';
+                    row.appendChild(cell);
+                });
+
+                // Add click handler for row highlighting
+                row.addEventListener('click', () => {
+                    highlightTableRow(index);
+                    highlightChartPoint(index);
+                });
+
+                tableBody.appendChild(row);
+            });
+        }
+
+        // Highlight table row
+        function highlightTableRow(index) {
+            // Remove previous highlight
+            const previousHighlight = tableBody.querySelector('.highlighted');
+            if (previousHighlight) {
+                previousHighlight.classList.remove('highlighted');
+            }
+            
+            // Add new highlight
+            const rows = tableBody.querySelectorAll('tr');
+            if (rows[index]) {
+                rows[index].classList.add('highlighted');
+                rows[index].scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }
+            
+            highlightedRowIndex = index;
+        }
+
+        // Highlight chart point (visual feedback)
+        function highlightChartPoint(index) {
+            if (chart && chart.data.datasets.length > 0) {
+                // Update point radius for highlighted point
+                chart.data.datasets.forEach(dataset => {
+                    dataset.pointRadius = dataset.data.map((_, i) => i === index ? 6 : 0);
+                    dataset.pointBackgroundColor = dataset.data.map((_, i) => i === index ? dataset.borderColor : 'transparent');
+                });
+                chart.update('none');
+            }
+        }
+
+        // Settings Modal Functions
+        function openSettingsModal() {
+            renderLineConfigs();
+            settingsModal.style.display = 'block';
+        }
+
+        function closeSettingsModal() {
+            settingsModal.style.display = 'none';
+        }
+
+        function renderLineConfigs() {
+            const configs = getLineConfigs();
+            lineConfigList.innerHTML = '';
+
+            Object.entries(configs).forEach(([type, config]) => {
+                createLineConfigRow(type, config.label, config.color);
+            });
+        }
+
+        function createLineConfigRow(type, label, color, isNew = false) {
+            const div = document.createElement('div');
+            div.className = 'line-config';
+            div.innerHTML = `
+                <input type="text" class="line-type" value="${type}" placeholder="Line Type" ${isNew ? '' : 'readonly'}>
+                <input type="text" class="line-label" value="${label}" placeholder="Display Label">
+                <input type="color" class="line-color" value="${color}">
+                <button type="button" onclick="this.parentElement.remove()">Remove</button>
+            `;
+            lineConfigList.appendChild(div);
+        }
+
+        function saveSettings() {
+            const configs = {};
+            const lineConfigs = lineConfigList.querySelectorAll('.line-config');
+            
+            lineConfigs.forEach(config => {
+                const type = config.querySelector('.line-type').value.trim();
+                const label = config.querySelector('.line-label').value.trim();
+                const color = config.querySelector('.line-color').value;
+                
+                if (type && label) {
+                    configs[type] = { label, color };
+                }
+            });
+
+            saveLineConfigs(configs);
+            closeSettingsModal();
+            updateVisualization(); // Refresh chart with new colors
+        }
+
+        function resetSettings() {
+            if (confirm('Reset to default line configurations?')) {
+                saveLineConfigs(defaultLineConfigs);
+                renderLineConfigs();
+            }
+        }
+
+        // Event Listeners
+        jsonInput.addEventListener('input', updateVisualization);
+        
+        settingsBtn.addEventListener('click', openSettingsModal);
+        
+        settingsModal.addEventListener('click', (e) => {
+            if (e.target === settingsModal || e.target.classList.contains('close')) {
+                closeSettingsModal();
+            }
+        });
+
+        document.getElementById('addLineConfig').addEventListener('click', () => {
+            createLineConfigRow('', '', '#000000', true);
+        });
+
+        document.getElementById('saveSettings').addEventListener('click', saveSettings);
+        document.getElementById('resetSettings').addEventListener('click', resetSettings);
+
+        // Export event listeners
+        document.getElementById('exportCsv').addEventListener('click', exportToCSV);
+        document.getElementById('exportExcel').addEventListener('click', exportToExcel);
+
+        // Sample data to demonstrate the functionality
+        const sampleData = {
+            "chartData": [
+                {
+                    "type": "Consumption",
+                    "values": Array.from({length: 288}, (_, i) => {
+                        // Convert 5-minute intervals to radians (full cycle in 24 hours)
+                        const angle = (i / 288) * 2 * Math.PI;
+                        return Math.sin(angle) * 25 + 35; // Sinus wave: Amplitude 25, offset 35
+                    })
+                },
+                {
+                    "type": "Panels", 
+                    "values": Array.from({length: 288}, (_, i) => {
+                        // Convert 5-minute intervals to radians (full cycle in 24 hours)
+                        const angle = (i / 288) * 2 * Math.PI;
+                        return Math.cos(angle) * 20 + 30; // Cosinus wave: Amplitude 20, offset 30
+                    })
+                }
+            ]
+        };
+
+        // New category-based format sample data
+        const sampleDataCategoryFormat = [
+            {
+                "category": "Generated",
+                "amount": 2700.6,
+                "chartData": {
+                    "values": Array.from({length: 288}, (_, i) => {
+                        // Solar generation pattern (peaks in the middle of the day)
+                        const angle = (i / 288) * 2 * Math.PI;
+                        return Math.max(0, Math.sin(angle) * 40 + 20); // Only positive values for generation
+                    })
+                }
+            },
+            {
+                "category": "Consumed",
+                "amount": 1950.3,
+                "chartData": {
+                    "values": Array.from({length: 288}, (_, i) => {
+                        // Consumption pattern with morning and evening peaks
+                        const angle = (i / 288) * 2 * Math.PI;
+                        const morningPeak = Math.sin((angle * 2) + Math.PI/4) * 15 + 25;
+                        const eveningPeak = Math.sin((angle * 2) - Math.PI/4) * 20 + 30;
+                        return Math.max(10, (morningPeak + eveningPeak) / 2);
+                    })
+                }
+            },
+            {
+                "category": "Grid Export",
+                "amount": 750.3,
+                "chartData": {
+                    "values": Array.from({length: 288}, (_, i) => {
+                        // Grid export (excess solar)
+                        const angle = (i / 288) * 2 * Math.PI;
+                        return Math.max(0, Math.sin(angle) * 15 + 5); // Export during peak generation
+                    })
+                }
+            }
+        ];
+
+        // Format switching event listeners
+        document.getElementById('loadFormat1').addEventListener('click', () => {
+            jsonInput.value = JSON.stringify(sampleData, null, 2);
+            updateVisualization();
+            // Update button states
+            document.getElementById('loadFormat1').classList.add('active');
+            document.getElementById('loadFormat2').classList.remove('active');
+        });
+
+        document.getElementById('loadFormat2').addEventListener('click', () => {
+            jsonInput.value = JSON.stringify(sampleDataCategoryFormat, null, 2);
+            updateVisualization();
+            // Update button states
+            document.getElementById('loadFormat2').classList.add('active');
+            document.getElementById('loadFormat1').classList.remove('active');
+        });
+
+        // Initialize with sample data
+        jsonInput.value = JSON.stringify(sampleData, null, 2);
+        updateVisualization();
+    </script>
+</body>
+
+</html>
