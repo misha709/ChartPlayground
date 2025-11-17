@@ -372,6 +372,8 @@
     </div>
 
     <script>
+        const ValuePercision = 3;
+
         const ctx = document.getElementById('chart').getContext('2d');
         const jsonInput = document.getElementById('jsonInput');
         const tableHeader = document.getElementById('tableHeader');
@@ -432,7 +434,7 @@
                     let row = labels[i];
                     data.chartData.forEach(series => {
                         const value = series.values[i] || 0;
-                        row += ',' + value.toFixed(2);
+                        row += ',' + value.toFixed(ValuePercision);
                     });
                     csvContent += row + '\n';
                 }
@@ -478,7 +480,7 @@
                     const row = [labels[i]];
                     data.chartData.forEach(series => {
                         const value = series.values[i] || 0;
-                        row.push(parseFloat(value.toFixed(2)));
+                        row.push(parseFloat(value.toFixed(ValuePercision)));
                     });
                     excelData.push(row);
                 }
@@ -641,7 +643,7 @@
                 chartData.forEach(series => {
                     const cell = document.createElement('td');
                     const value = series.values[index];
-                    cell.textContent = value !== null && value !== undefined ? value.toFixed(2) : 'null';
+                    cell.textContent = value !== null && value !== undefined ? value.toFixed(ValuePercision) : 'null';
                     row.appendChild(cell);
                 });
 
