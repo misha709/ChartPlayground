@@ -320,7 +320,16 @@
     <div class="header">
         <h2>Chart Playground</h2>
         <div class="export-controls">
-            <button id="exportCsv" class="export-btn csv">📄 Export CSV</button>
+            <div class="export-options" style="display:flex;align-items:center;gap:8px;margin-right:8px;">
+                <label style="font-size:13px;display:flex;align-items:center;gap:6px;">
+                    <input id="includeDST" type="checkbox"> Include DST
+                </label>
+                <label style="font-size:13px;display:flex;align-items:center;gap:6px;">
+                    <input id="exportBaseDateText" type="text" placeholder="YYYY-MM-DD[ HH:mm[:ss]][ DST]"> free text
+                </label>
+                <button id="setBaseDateBtn" class="btn" title="Parse and set base date">Set</button>
+                <div id="baseDatePreview" style="font-size:13px;color:#333;margin-top:6px;display:block"></div>
+            </div>
             <button id="exportExcel" class="export-btn">📊 Export Excel</button>
             <button id="settingsBtn" class="settings-btn">⚙️ Line Settings</button>
         </div>
@@ -374,7 +383,7 @@
     <script>
         const ValuePercision = 3;
 
-        const ctx = document.getElementById('chart').getContext('2d');
+    const ctx = document.getElementById('chart').getContext('2d');
         const jsonInput = document.getElementById('jsonInput');
         const tableHeader = document.getElementById('tableHeader');
         const tableBody = document.getElementById('tableBody');
@@ -383,6 +392,9 @@
         const lineConfigList = document.getElementById('lineConfigList');
         let chart;
         let highlightedRowIndex = -1;
+    // Parsed base date (set via free-text input). If null exporter will use today.
+    let parsedBaseDate = null;
+    let parsedBaseDateDST = false;
 
         // Default line configurations
         const defaultLineConfigs = {
@@ -416,93 +428,134 @@
         }
 
         // Export functions
-        function exportToCSV() {
-            try {
-                const rawData = JSON.parse(jsonInput.value.trim());
-                const data = normalizeDataFormat(rawData);
-                
-                if (!data || !data.chartData || !Array.isArray(data.chartData)) {
-                    alert('No valid data to export. Please ensure your data is in a supported format.');
-                    return;
-                }
-
-                const labels = generateTimeLabels();
-                let csvContent = 'Time,' + data.chartData.map(series => series.type).join(',') + '\n';
-                
-                // Generate rows
-                for (let i = 0; i < labels.length; i++) {
-                    let row = labels[i];
-                    data.chartData.forEach(series => {
-                        const value = series.values[i] || 0;
-                        row += ',' + value.toFixed(ValuePercision);
-                    });
-                    csvContent += row + '\n';
-                }
-
-                // Create and download file
-                const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-                const link = document.createElement('a');
-                const url = URL.createObjectURL(blob);
-                link.setAttribute('href', url);
-                link.setAttribute('download', `chart-data-${new Date().toISOString().split('T')[0]}.csv`);
-                link.style.visibility = 'hidden';
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-                URL.revokeObjectURL(url);
-                
-            } catch (error) {
-                alert('Error exporting CSV: ' + error.message);
-            }
-        }
 
         function exportToExcel() {
             try {
                 const rawData = JSON.parse(jsonInput.value.trim());
                 const data = normalizeDataFormat(rawData);
-                
+
                 if (!data || !data.chartData || !Array.isArray(data.chartData)) {
                     alert('No valid data to export. Please ensure your data is in a supported format.');
                     return;
                 }
 
+                const includeDST = document.getElementById('includeDST')?.checked;
+
                 const labels = generateTimeLabels();
-                
-                // Prepare data for Excel
-                const excelData = [];
-                
-                // Header row
-                const header = ['Time', ...data.chartData.map(series => series.type)];
-                excelData.push(header);
-                
-                // Data rows
-                for (let i = 0; i < labels.length; i++) {
-                    const row = [labels[i]];
-                    data.chartData.forEach(series => {
-                        const value = series.values[i] || 0;
-                        row.push(parseFloat(value.toFixed(ValuePercision)));
-                    });
-                    excelData.push(row);
+
+                // New format: produce rows with columns: DateTime, Time, <one column per series>
+                const lineConfigs = getLineConfigs();
+                const seriesHeaders = data.chartData.map(s => (lineConfigs[s.type] && lineConfigs[s.type].label) ? lineConfigs[s.type].label : s.type);
+                const header = ['DateTime', 'Time', ...seriesHeaders];
+                const rows = [];
+
+                // Use parsedBaseDate if available (set via the free-text Set button). Otherwise use today's date at 00:00:00.
+                let baseDate = null;
+                if (parsedBaseDate && parsedBaseDate instanceof Date && !isNaN(parsedBaseDate.getTime())) {
+                    baseDate = new Date(parsedBaseDate.getFullYear(), parsedBaseDate.getMonth(), parsedBaseDate.getDate(), 0, 0, 0);
                 }
+                if (!baseDate) {
+                    const now = new Date();
+                    baseDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
+                }
+
+                const pad = (n) => String(n).padStart(2, '0');
+
+                // For each time label and for each series, produce a row
+                for (let i = 0; i < labels.length; i++) {
+                    const [hh, mm] = labels[i].split(':').map(s => parseInt(s, 10));
+                    // compute exact datetime by taking base date's year/month/day and adding hours/minutes
+                    const rowDate = new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate(), hh, mm, 0);
+                    const dateTimeStr = `${rowDate.getFullYear()}-${pad(rowDate.getMonth()+1)}-${pad(rowDate.getDate())} ${pad(rowDate.getHours())}:${pad(rowDate.getMinutes())}:${pad(rowDate.getSeconds())}` + (includeDST ? ' DST' : '');
+                    const timeStr = `${pad(hh)}:${pad(mm)}`;
+
+                    // collect values for each series in column order
+                    const valuesRow = data.chartData.map(series => {
+                        const valueRaw = series.values[i];
+                        const v = (valueRaw === null || valueRaw === undefined) ? 0 : parseFloat(valueRaw.toFixed(ValuePercision));
+                        return v;
+                    });
+                    rows.push([dateTimeStr, timeStr, ...valuesRow]);
+                }
+
+                const excelData = [];
+                // We include per-row datetimes (DateTime column is always present).
+                excelData.push(header);
+                excelData.push(...rows);
 
                 // Create workbook and worksheet
                 const wb = XLSX.utils.book_new();
                 const ws = XLSX.utils.aoa_to_sheet(excelData);
-                
-                // Auto-width columns
-                const colWidths = header.map(h => ({ wch: Math.max(h.length, 12) }));
+
+                // Auto-width columns based on header (fallback to 12)
+                const colWidths = header.map(h => ({ wch: Math.max(String(h).length, 12) }));
                 ws['!cols'] = colWidths;
-                
+
                 // Add worksheet to workbook
                 XLSX.utils.book_append_sheet(wb, ws, 'Chart Data');
-                
+
                 // Generate and download file
                 const fileName = `chart-data-${new Date().toISOString().split('T')[0]}.xlsx`;
                 XLSX.writeFile(wb, fileName);
-                
+
             } catch (error) {
                 alert('Error exporting Excel: ' + error.message);
             }
+        }
+
+        // Parse free-text base date like:
+        //  - 2025-08-17 06:00:00 DST
+        //  - 2025-08-17 06:00:00
+        //  - 2025-08-17
+        function parseBaseDateText(text) {
+            if (!text || !text.trim()) return null;
+            const t = text.trim();
+            // Regex: date YYYY-MM-DD, optional ' ' or 'T' then time HH:MM[:SS], optional trailing DST
+            const re = /^(\d{4}-\d{2}-\d{2})(?:[ T](\d{2}:\d{2}(?::\d{2})?))?(?:\s*(DST))?$/i;
+            const m = t.match(re);
+            if (!m) return null;
+            const datePart = m[1];
+            const timePart = m[2] || '00:00:00';
+            const dstPart = !!m[3];
+
+            // Normalize timePart to HH:MM:SS
+            const timeSegments = timePart.split(':');
+            while (timeSegments.length < 3) timeSegments.push('00');
+            const [hh, mm, ss] = timeSegments.map(s => parseInt(s, 10));
+
+            const [yyyy, MM, dd] = datePart.split('-').map(s => parseInt(s, 10));
+            // Create Date object in local time using components
+            const d = new Date(yyyy, MM - 1, dd, hh, mm, ss);
+            if (isNaN(d.getTime())) return null;
+            return { date: d, dst: dstPart };
+        }
+
+        function formatDateTimeForPreview(d, includeDST) {
+            const pad = (n) => String(n).padStart(2, '0');
+            return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}` + (includeDST ? ' DST' : '');
+        }
+
+        function parseAndSetBaseDate() {
+            const text = document.getElementById('exportBaseDateText').value;
+            const parsed = parseBaseDateText(text);
+            if (!parsed) {
+                alert('Unable to parse date. Use formats like:\n2025-08-17 06:00:00 DST\n2025-08-17 06:00:00\n2025-08-17');
+                return;
+            }
+            const d = parsed.date;
+            const includeDST = parsed.dst;
+
+            // Store parsed base date and DST flag
+            parsedBaseDate = new Date(d.getFullYear(), d.getMonth(), d.getDate(), d.getHours(), d.getMinutes(), d.getSeconds());
+            parsedBaseDateDST = !!includeDST;
+
+            // Set DST checkbox according to parsed value
+            const dstCheckbox = document.getElementById('includeDST');
+            if (dstCheckbox) dstCheckbox.checked = parsedBaseDateDST;
+
+            // Update preview below the input
+            const preview = document.getElementById('baseDatePreview');
+            if (preview) preview.textContent = formatDateTimeForPreview(parsedBaseDate, parsedBaseDateDST);
         }
 
         // Function to detect and convert new data format
@@ -762,9 +815,18 @@
         document.getElementById('saveSettings').addEventListener('click', saveSettings);
         document.getElementById('resetSettings').addEventListener('click', resetSettings);
 
-        // Export event listeners
-        document.getElementById('exportCsv').addEventListener('click', exportToCSV);
-        document.getElementById('exportExcel').addEventListener('click', exportToExcel);
+        // Set base date button and enter handling
+        const setBtn = document.getElementById('setBaseDateBtn');
+        if (setBtn) setBtn.addEventListener('click', parseAndSetBaseDate);
+        const textInput = document.getElementById('exportBaseDateText');
+        if (textInput) {
+            textInput.addEventListener('keyup', (e) => {
+                if (e.key === 'Enter') parseAndSetBaseDate();
+            });
+        }
+
+    // Export event listeners
+    document.getElementById('exportExcel').addEventListener('click', exportToExcel);
 
         // Sample data to demonstrate the functionality
         const sampleData = {
